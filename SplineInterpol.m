@@ -1,65 +1,62 @@
-% Clamped Cubic Spline with 5 data points
-
 % Input: data points and end derivatives
-x = [1 2 3 4 5];              % example x-values
-y = [2 3 5 4 2];              % example y-values
-fp0 = 1.0;                    % derivative at x1
-fpn = -1.0;                   % derivative at x5
+x = [-1 0 1 2 3];                       % x-values
+y = [-28 -10 6 26 56];                  % y-values
+L = -21;                                % derivative at x1
+R = -37;                                % derivative at xn
+natural = 0;                            % flag variable for natural spline
+n = length(x) - 1;                      % Number of spline intervals
+slope = @(k)((y(k+1)-y(k))/(x(k+1)-x(k)));
 
-n = length(x) - 1;            % Number of spline intervals (4)
-h = diff(x);                  % Step sizes
-
-% Step 1: Setup the system
+% Setup the system
 A = zeros(n+1);               % Coefficient matrix (5x5)
 rhs = zeros(n+1,1);           % Right-hand side
 
-% Clamped conditions
-A(1,1) = 2*h(1);
-A(1,2) = h(1);
-rhs(1) = 3*( (y(2) - y(1))/h(1) - fp0 );
+if ~natural
+    A(1,1) = (x(2)-x(1))/3; A(1,2) = (x(2)-x(1))/6;
+    A(n+1,n) = (x(n+1)-x(n))/6; A(n+1,n+1) = (x(n+1)-x(n))/3;
+    rhs(1) = slope(1) - L; 
+    rhs(n+1) = R - (slope(n)); 
+end
 
-A(n+1,n) = h(n);
-A(n+1,n+1) = 2*h(n);
-rhs(n+1) = 3*( fpn - (y(end) - y(end-1))/h(n) );
 
-% Interior equations
 for i = 2:n
-    A(i,i-1) = h(i-1);
-    A(i,i)   = 2*(h(i-1) + h(i));
-    A(i,i+1) = h(i);
-    rhs(i) = 3*((y(i+1) - y(i))/h(i) - (y(i) - y(i-1))/h(i-1));
+    j = i-1; A(i,j) = (x(j+1)-x(j))/6;
+    j = i; A(i,j) = (x(j+1)-x(j-1))/3;
+    j = i+1; A(i,j) = (x(j)-x(j-1))/6;
+    rhs(i) = (slope(i)) - (slope(i-1));
 end
 
-% Step 2: Solve for c coefficients
-c = A \ rhs;
 
-% Step 3: Compute a, b, d for each spline interval
-a = y(1:n);
-b = zeros(n,1);
-d = zeros(n,1);
+% Solving z values
+if natural
+    A_n = A(2:n,2:n);
+    rhs_n = rhs(2:n);
+    z = A_n\rhs_n;
+    z = [0;z;0];
+else
+    z = A\rhs;
+end 
 
+
+
+% Spline function
+syms t
+s = [];
 for i = 1:n
-    b(i) = (y(i+1) - y(i))/h(i) - h(i)*(2*c(i) + c(i+1))/3;
-    d(i) = (c(i+1) - c(i)) / (3*h(i));
-end
+    c = slope(i) - ( z(i+1)/6 + z(i)/3 )*( x(i+1)-x(i) );
+    b = z(i)/2;
+    a = (1/6)*( (z(i+1)-z(i)) / (x(i+1)-x(i)) );
+    s = vertcat(s,y(i) + c*(t-x(i)) + b*(t-x(i))^2 + a*(t-x(i))^3);
+end 
 
-% Output spline coefficients for each interval
-% S_i(x) = a(i) + b(i)*(x - x(i)) + c(i)*(x - x(i))^2 + d(i)*(x - x(i))^3
-
-fprintf('Interval spline coefficients:\n');
-for i = 1:n
-    s{i} = [a(i) b(i) c(i) d(i)];
-    fprintf('Interval [%f, %f]:\n', x(i), x(i+1));
-    fprintf('  a = %.4f\n', a(i));
-    fprintf('  b = %.4f\n', b(i));
-    fprintf('  c = %.4f\n', c(i));
-    fprintf('  d = %.4f\n\n', d(i));
-    
-end
-
-for i = 1:n
-    x_span = linspace(x(i),x(i+1));
-    plot(x_span, polyval(s{i},x_span));
-    hold on
-end
+% Plotting
 plot(x,y,'rx')
+hold on
+for i = 1:n
+    fplot(s(i),[x(i),x(i+1)],'b-')
+end
+
+% Reference
+poly = [1 -1 16 -10];
+x_span = linspace(x(1),x(n+1));
+plot(x_span,polyval(poly,x_span),'r-')
